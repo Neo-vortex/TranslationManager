@@ -100,11 +100,11 @@
         newTranslation.Values = translationValues.Where(v => !string.IsNullOrEmpty(v.Culture)).ToList();
         DbContext.Translations.Add(newTranslation);
         await DbContext.SaveChangesAsync();
-        NavigationManager.NavigateTo("/translations");
+        NavigationManager.NavigateTo("/");
     }
 
     private void Cancel()
     {
-        NavigationManager.NavigateTo("/translations");
+        NavigationManager.NavigateTo("/");
     }
 }
