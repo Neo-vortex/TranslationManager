@@ -1,0 +1,513 @@
+@page "/"
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Caching.Distributed
+@using TranslationManager.Models
+@using System.Text.Json
+@using System.Text
+@using YamlDotNet.Serialization
+@using System.IO
+@inject ApplicationDbContext DbContext
+@inject NavigationManager NavigationManager
+@inject IDistributedCache Cache  
+@inject IJSRuntime JsRuntime
+
+<PageTitle>Translation Management</PageTitle>
+
+<h1>Translation Management</h1>
+
+<div class="mb-3">
+    <div class="input-group">
+        <input @bind="searchTerm" @bind:event="oninput" class="form-control" placeholder="Search by key or value..." />
+        <button @onclick="ClearSearch" class="btn btn-outline-secondary">Clear</button>
+    </div>
+</div>
+
+<div class="mb-3 d-flex gap-2">
+    <button @onclick="@(() => NavigationManager.NavigateTo("/translations/add"))" 
+            class="btn btn-success">
+        Add New Translation
+    </button>
+        
+    <div class="dropdown">
+        <button class="btn btn-primary dropdown-toggle" 
+                type="button" 
+                id="exportDropdown" 
+                @onclick="() => ToggleDropdown()"
+                aria-expanded="@isDropdownOpen">
+            Export/Import
+        </button>
+        <ul class="dropdown-menu @(isDropdownOpen ? "show" : "")" 
+            aria-labelledby="exportDropdown">
+            <li><h6 class="dropdown-header">Export Options</h6></li>
+            <li><a class="dropdown-item" @onclick="ExportAsJson">Export as JSON</a></li>
+            <li><a class="dropdown-item" @onclick="ExportAsYaml">Export as YAML</a></li>
+            <li><a class="dropdown-item" @onclick="ExportAsExcel">Export as Excel</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><h6 class="dropdown-header">Import Options</h6></li>
+            <li>
+                <label class="dropdown-item" style="cursor: pointer;">
+                    Import from JSON
+                    <InputFile accept=".json" style="display: none;" 
+                               OnChange="HandleJsonImport" />
+                </label>
+            </li>
+            <li>
+                <label class="dropdown-item" style="cursor: pointer;">
+                    Import from YAML
+                    <InputFile accept=".yaml,.yml" style="display: none;" 
+                               OnChange="HandleYamlImport" />
+                </label>
+            </li>
+            <li>
+                <label class="dropdown-item" style="cursor: pointer;">
+                    Import from Excel
+                    <InputFile accept=".csv,.xlsx,.xls" style="display: none;" 
+                               OnChange="HandleExcelImport" />
+                </label>
+            </li>
+        </ul>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center my-4">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else if (translations == null || !translations.Any())
+{
+    <div class="alert alert-info">No translations found</div>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Key</th>
+                <th>Values</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var translation in filteredTranslations)
+            {
+                <tr>
+                    <td>@translation.Key</td>
+                    <td>
+                        <ul class="list-unstyled">
+                            @foreach (var value in translation.Values)
+                            {
+                                <li><strong>@value.Culture:</strong> @value.Value</li>
+                            }
+                        </ul>
+                    </td>
+                    <td>
+                        <button @onclick="() => EditTranslation(translation.Id)" class="btn btn-sm btn-primary">
+                            Edit
+                        </button>
+                        <button @onclick="() => DeleteTranslation(translation.Id)" class="btn btn-sm btn-danger">
+                            Delete
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (showCacheInvalidationToast)
+{
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+        <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header bg-success text-white">
+                <strong class="me-auto">Success</strong>
+                <button type="button" class="btn-close btn-close-white" @onclick="HideToast"></button>
+            </div>
+            <div class="toast-body">
+                All cached translations have been invalidated.
+            </div>
+        </div>
+    </div>
+}
+
+@if (showExportToast)
+{
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+        <div class="toast show" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header bg-success text-white">
+                <strong class="me-auto">Success</strong>
+                <button type="button" class="btn-close btn-close-white" @onclick="HideExportToast"></button>
+            </div>
+            <div class="toast-body">
+                @exportToastMessage
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Translation> translations = [];
+    private IEnumerable<Translation> filteredTranslations => translations
+        .Where(t => string.IsNullOrEmpty(searchTerm) ||
+                   t.Key.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                   t.Values.Any(v => v.Value.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)))
+        .OrderBy(t => t.Key);
+
+    private string searchTerm = string.Empty;
+    private bool isLoading = true;
+    private bool showCacheInvalidationToast = false;
+    private bool showExportToast = false;
+    private string exportToastMessage = string.Empty;
+    private bool isDropdownOpen = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTranslations();
+        isLoading = false;
+    }
+
+    private async Task LoadTranslations()
+    {
+        translations = await DbContext.Translations
+            .Include(t => t.Values)
+            .ToListAsync();
+    }
+
+    private void EditTranslation(int id)
+    {
+        NavigationManager.NavigateTo($"/translations/edit/{id}");
+    }
+
+    private async Task DeleteTranslation(int id)
+    {
+        var translation = await DbContext.Translations.FindAsync(id);
+        if (translation != null)
+        {
+            DbContext.Translations.Remove(translation);
+            await DbContext.SaveChangesAsync();
+            await LoadTranslations();
+        }
+    }
+
+    private void ClearSearch()
+    {
+        searchTerm = string.Empty;
+    }
+    
+    private void HideToast()
+    {
+        showCacheInvalidationToast = false;
+        StateHasChanged();
+    }
+
+    private void HideExportToast()
+    {
+        showExportToast = false;
+        StateHasChanged();
+    }
+
+    private void ToggleDropdown()
+    {
+        isDropdownOpen = !isDropdownOpen;
+    }
+
+    #region Export Methods
+    private async Task ExportAsJson()
+    {
+        isDropdownOpen = false;
+        try
+        {
+            var exportData = translations.ToDictionary(
+                t => t.Key,
+                t => t.Values.ToDictionary(v => v.Culture, v => v.Value)
+            );
+
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            var json = JsonSerializer.Serialize(exportData, options);
+            var fileName = $"translations_{DateTime.Now:yyyyMMddHHmmss}.json";
+            await DownloadFile(fileName, "application/json", json);
+            
+            exportToastMessage = "JSON export completed successfully";
+            showExportToast = true;
+        }
+        catch (Exception ex)
+        {
+            exportToastMessage = $"Error exporting JSON: {ex.Message}";
+            showExportToast = true;
+        }
+    }
+
+    private async Task ExportAsYaml()
+    {
+        isDropdownOpen = false;
+        try
+        {
+            var exportData = translations.ToDictionary(
+                t => t.Key,
+                t => t.Values.ToDictionary(v => v.Culture, v => v.Value)
+            );
+
+            var serializer = new Serializer();
+            var yaml = serializer.Serialize(exportData);
+            var fileName = $"translations_{DateTime.Now:yyyyMMddHHmmss}.yaml";
+            await DownloadFile(fileName, "application/yaml", yaml);
+            
+            exportToastMessage = "YAML export completed successfully";
+            showExportToast = true;
+        }
+        catch (Exception ex)
+        {
+            exportToastMessage = $"Error exporting YAML: {ex.Message}";
+            showExportToast = true;
+        }
+    }
+
+    private async Task ExportAsExcel()
+    {
+        isDropdownOpen = false;
+        try
+        {
+            // Get all unique cultures
+            var cultures = translations
+                .SelectMany(t => t.Values.Select(v => v.Culture))
+                .Distinct()
+                .OrderBy(c => c)
+                .ToList();
+
+            // Create CSV content
+            var csvContent = new StringBuilder();
+            
+            // Add header row
+            csvContent.Append("Key,");
+            csvContent.AppendJoin(",", cultures);
+            csvContent.AppendLine();
+            
+            // Add data rows
+            foreach (var translation in translations.OrderBy(t => t.Key))
+            {
+                csvContent.Append($"\"{EscapeCsv(translation.Key)}\",");
+                
+                foreach (var culture in cultures)
+                {
+                    var value = translation.Values.FirstOrDefault(v => v.Culture == culture)?.Value ?? "";
+                    csvContent.Append($"\"{EscapeCsv(value)}\",");
+                }
+                
+                csvContent.Length--; // Remove trailing comma
+                csvContent.AppendLine();
+            }
+
+            var fileName = $"translations_{DateTime.Now:yyyyMMddHHmmss}.csv";
+            await DownloadFile(fileName, "text/csv", csvContent.ToString());
+            
+            exportToastMessage = "Excel (CSV) export completed successfully";
+            showExportToast = true;
+        }
+        catch (Exception ex)
+        {
+            exportToastMessage = $"Error exporting Excel: {ex.Message}";
+            showExportToast = true;
+        }
+    }
+
+    private string EscapeCsv(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return "";
+        return input.Replace("\"", "\"\"");
+    }
+
+    private async Task DownloadFile(string fileName, string contentType, string content)
+    {
+        var byteArray = Encoding.UTF8.GetBytes(content);
+        var base64 = Convert.ToBase64String(byteArray);
+        await JsRuntime.InvokeVoidAsync("downloadFile", fileName, contentType, base64);
+    }
+    #endregion
+
+    #region Import Methods
+    private async Task HandleJsonImport(InputFileChangeEventArgs e)
+    {
+        isDropdownOpen = false;
+        try
+        {
+            var file = e.File;
+            using var stream = file.OpenReadStream();
+            using var reader = new StreamReader(stream);
+            var jsonContent = await reader.ReadToEndAsync();
+            
+            var importData = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(jsonContent);
+            if (importData != null) await ImportTranslations(importData);
+
+            exportToastMessage = "JSON import completed successfully";
+            showExportToast = true;
+        }
+        catch (Exception ex)
+        {
+            exportToastMessage = $"Error importing JSON: {ex.Message}";
+            showExportToast = true;
+        }
+    }
+
+    private async Task HandleYamlImport(InputFileChangeEventArgs e)
+    {
+        isDropdownOpen = false;
+        try
+        {
+            var file = e.File;
+            using var stream = file.OpenReadStream();
+            using var reader = new StreamReader(stream);
+            var yamlContent = await reader.ReadToEndAsync();
+            
+            var deserializer = new Deserializer();
+            var importData = deserializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(yamlContent);
+            await ImportTranslations(importData);
+            
+            exportToastMessage = "YAML import completed successfully";
+            showExportToast = true;
+        }
+        catch (Exception ex)
+        {
+            exportToastMessage = $"Error importing YAML: {ex.Message}";
+            showExportToast = true;
+        }
+    }
+
+    private async Task HandleExcelImport(InputFileChangeEventArgs e)
+    {
+        isDropdownOpen = false;
+        try
+        {
+            var file = e.File;
+            using var stream = file.OpenReadStream();
+            using var reader = new StreamReader(stream);
+            var csvContent = await reader.ReadToEndAsync();
+            
+            var importData = ParseCsv(csvContent);
+            await ImportTranslations(importData);
+            
+            exportToastMessage = "Excel import completed successfully";
+            showExportToast = true;
+        }
+        catch (Exception ex)
+        {
+            exportToastMessage = $"Error importing Excel: {ex.Message}";
+            showExportToast = true;
+        }
+    }
+
+    private Dictionary<string, Dictionary<string, string>> ParseCsv(string csvContent)
+    {
+        var result = new Dictionary<string, Dictionary<string, string>>();
+        var lines = csvContent.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        
+        if (lines.Length < 1) return result;
+        
+        var headers = lines[0].Split(',');
+        var cultures = headers.Skip(1).ToArray();
+        
+        for (int i = 1; i < lines.Length; i++)
+        {
+            var values = ParseCsvLine(lines[i]);
+            if (values.Length < 1) continue;
+            
+            var key = values[0];
+            var translations = new Dictionary<string, string>();
+            
+            for (int j = 0; j < cultures.Length && j + 1 < values.Length; j++)
+            {
+                translations[cultures[j]] = values[j + 1];
+            }
+            
+            result[key] = translations;
+        }
+        
+        return result;
+    }
+
+    private string[] ParseCsvLine(string line)
+    {
+        var result = new List<string>();
+        var inQuotes = false;
+        var currentValue = new StringBuilder();
+        
+        foreach (var c in line)
+        {
+            if (c == '"')
+            {
+                inQuotes = !inQuotes;
+            }
+            else if (c == ',' && !inQuotes)
+            {
+                result.Add(currentValue.ToString());
+                currentValue.Clear();
+            }
+            else
+            {
+                currentValue.Append(c);
+            }
+        }
+        
+        result.Add(currentValue.ToString());
+        return result.ToArray();
+    }
+
+    private async Task ImportTranslations(Dictionary<string, Dictionary<string, string>> importData)
+    {
+        if (importData == null) return;
+        
+        // Get all existing translations
+        var existingTranslations = await DbContext.Translations
+            .Include(t => t.Values)
+            .ToListAsync();
+            
+        foreach (var importItem in importData)
+        {
+            var existingTranslation = existingTranslations.FirstOrDefault(t => t.Key == importItem.Key);
+            
+            if (existingTranslation == null)
+            {
+                // Create new translation
+                var newTranslation = new Translation
+                {
+                    Key = importItem.Key,
+                    Values = importItem.Value.Select(v => new TranslationValue
+                    {
+                        Culture = v.Key,
+                        Value = v.Value
+                    }).ToList()
+                };
+                DbContext.Translations.Add(newTranslation);
+            }
+            else
+            {
+                // Update existing translation values
+                foreach (var importValue in importItem.Value)
+                {
+                    var existingValue = existingTranslation.Values.FirstOrDefault(v => v.Culture == importValue.Key);
+                    
+                    if (existingValue == null)
+                    {
+                        // Add new culture value
+                        existingTranslation.Values.Add(new TranslationValue
+                        {
+                            Culture = importValue.Key,
+                            Value = importValue.Value
+                        });
+                    }
+                    else
+                    {
+                        // Update existing culture value
+                        existingValue.Value = importValue.Value;
+                    }
+                }
+            }
+        }
+        
+        await DbContext.SaveChangesAsync();
+        await LoadTranslations(); // Refresh the displayed data
+    }
+    #endregion
+}

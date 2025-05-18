@@ -1,0 +1,138 @@
+@page "/translations/edit/{Id:int}"
+@using System.Globalization
+@using Microsoft.EntityFrameworkCore
+@using TranslationManager.Models
+@inject ApplicationDbContext DbContext
+@inject NavigationManager NavigationManager
+
+<PageTitle>Edit Translation</PageTitle>
+
+<h1>Edit Translation</h1>
+
+@if (translation == null)
+{
+    <div class="alert alert-info">Loading translation...</div>
+}
+else
+{
+    <EditForm Model="@translation" OnValidSubmit="@HandleValidSubmit">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="mb-3">
+            <label for="key" class="form-label">Key</label>
+            <InputText id="key" @bind-Value="translation.Key" class="form-control" />
+            <ValidationMessage For="@(() => translation.Key)" />
+        </div>
+
+        <div class="mb-3">
+            <h4>Translation Values</h4>
+            @{
+                var valuesList = translation.Values.ToList();
+                for (int i = 0; i < valuesList.Count; i++)
+                {
+                    var currentValue = valuesList[i];
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label">Culture</label>
+                                <select @bind="currentValue.Culture" class="form-select">
+                                    <option value="">Select Culture</option>
+                                    @foreach (var culture in availableCultures)
+                                    {
+                                        <option value="@culture.Name">@culture.DisplayName (@culture.Name)</option>
+                                    }
+                                </select>
+                                <ValidationMessage For="@(() => currentValue.Culture)" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Value</label>
+                                <InputText @bind-Value="currentValue.Value" class="form-control" />
+                                <ValidationMessage For="@(() => currentValue.Value)" />
+                            </div>
+                            <button type="button" @onclick="() => RemoveValue(currentValue)" class="btn btn-danger btn-sm">
+                                Remove
+                            </button>
+                        </div>
+                    </div>
+                }
+            }
+
+            <button type="button" @onclick="AddValue" class="btn btn-secondary">
+                Add Language Value
+            </button>
+        </div>
+
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <button type="button" @onclick="Cancel" class="btn btn-outline-secondary ms-2">
+                Cancel
+            </button>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Translation? translation;
+    private List<CultureInfo> availableCultures = new()
+    {
+        new CultureInfo("fa-IR"),
+        new CultureInfo("en-US"),
+        new CultureInfo("es-ES"),
+        new CultureInfo("fr-FR"),
+        new CultureInfo("de-DE"),
+        new CultureInfo("it-IT"),
+        new CultureInfo("pt-PT"),
+        new CultureInfo("ru-RU"),
+        new CultureInfo("zh-CN"),
+        new CultureInfo("ja-JP"),
+        new CultureInfo("ar-SA")
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        translation = await DbContext.Translations
+            .Include(t => t.Values)
+            .FirstOrDefaultAsync(t => t.Id == Id);
+
+        if (translation == null)
+        {
+            NavigationManager.NavigateTo("/translations");
+        }
+    }
+
+    private void AddValue()
+    {
+        translation?.Values.Add(new TranslationValue());
+    }
+
+    private void RemoveValue(TranslationValue value)
+    {
+        if (translation != null)
+        {
+            if (value.Id > 0) // Existing record
+            {
+                DbContext.TranslationValues.Remove(value);
+            }
+            translation.Values.Remove(value);
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (translation != null)
+        {
+            translation.UpdatedAt = DateTime.UtcNow;
+            await DbContext.SaveChangesAsync();
+            NavigationManager.NavigateTo("/translations");
+        }
+    }
+
+    private void Cancel()
+    {
+        NavigationManager.NavigateTo("/translations");
+    }
+}

@@ -1,0 +1,17 @@
+﻿@page "/"
+@namespace TranslationManager.Pages
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    Layout = "_Layout";
+}
+<script>
+    function downloadFile(filename, contentType, base64) {
+        const link = document.createElement('a');
+        link.href = `data:${contentType};base64,${base64}`;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+</script>
+<component type="typeof(App)" render-mode="ServerPrerendered" />
