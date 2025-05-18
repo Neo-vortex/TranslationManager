@@ -42,6 +42,7 @@ The Translation Manager provides a complete solution for managing application tr
 2. Configure database in `appsettings.json`:
    ```json
    "ConnectionStrings": {
+     "Redis" : "localhost:6379",
      "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=TranslationManager;Trusted_Connection=True;"
    }
    ```
