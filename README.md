@@ -2,9 +2,10 @@
 
 ## Introduction
 The Translation Manager provides a complete solution for managing application translations with a Blazor-based UI and REST API.
+
+
+
 ![image](https://github.com/user-attachments/assets/b364e562-d9ca-4316-a280-efda34bd0329)
-
-
 ## Features
 
 - **Web-based Management UI**
