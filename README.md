@@ -1,6 +1,7 @@
 # Translation Manager Documentation
 
 ## Introduction
+Managing translations using RESX files is outdated and inefficient—it often leads to merge conflicts and requires recompiling the application for even minor changes, making it unsuitable for agile workflows.
 The Translation Manager provides a complete solution for managing application translations with a Blazor-based UI and REST API.
 
 
