@@ -100,7 +100,7 @@ else
 
         if (translation == null)
         {
-            NavigationManager.NavigateTo("/translations");
+            NavigationManager.NavigateTo("/");
         }
     }
 
@@ -127,12 +127,12 @@ else
         {
             translation.UpdatedAt = DateTime.UtcNow;
             await DbContext.SaveChangesAsync();
-            NavigationManager.NavigateTo("/translations");
+            NavigationManager.NavigateTo("/");
         }
     }
 
     private void Cancel()
     {
-        NavigationManager.NavigateTo("/translations");
+        NavigationManager.NavigateTo("/");
     }
 }
