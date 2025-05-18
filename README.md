@@ -21,7 +21,7 @@ The Translation Manager provides a complete solution for managing application tr
 
 - **API Access**
   - RESTful endpoints
-  - Caching support
+  - Caching support (5 min ttl for each transaltion)
   - Culture-specific retrieval
 
 ## Installation
