@@ -1,12 +1,12 @@
 # Translation Manager Documentation
 
 ## Introduction
+Managing translations using RESX files is outdated and inefficient—it often leads to merge conflicts and requires recompiling the application for even minor changes, making it unsuitable for agile workflows.
 The Translation Manager provides a complete solution for managing application translations with a Blazor-based UI and REST API.
+
+
+
 ![image](https://github.com/user-attachments/assets/b364e562-d9ca-4316-a280-efda34bd0329)
-![image](https://github.com/user-attachments/assets/0d41b1fd-bfde-4d5b-905c-4b7f3791ec52)
-![image](https://github.com/user-attachments/assets/fc47245c-4150-4a57-8081-69f6d6384767)
-
-
 ## Features
 
 - **Web-based Management UI**
@@ -21,7 +21,7 @@ The Translation Manager provides a complete solution for managing application tr
 
 - **API Access**
   - RESTful endpoints
-  - Caching support
+  - Caching support (5 min ttl for each transaltion)
   - Culture-specific retrieval
 
 ## Installation
@@ -42,6 +42,7 @@ The Translation Manager provides a complete solution for managing application tr
 2. Configure database in `appsettings.json`:
    ```json
    "ConnectionStrings": {
+     "Redis" : "localhost:6379",
      "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=TranslationManager;Trusted_Connection=True;"
    }
    ```
@@ -77,7 +78,19 @@ GET /api/translations/{key}/{culture}
 ```bash
 curl -X GET "https://yourapi.com/api/translations/welcome_message/en-US"
 ```
+## docker
 
+### Run using docker
+```bash
+docker run -d \
+  -p 8080:8080 \
+  -p 8081:8081 \
+  -e ASPNETCORE_ENVIRONMENT=Production \
+  -e ConnectionStrings__DefaultConnection="Host=postgres;Port=5432;Database=Translation;Username=postgres;Password=postgres" \
+  -e ConnectionStrings__Redis="redis:6379" \
+  --name translation-manager \
+  docker.io/realneovortex/traslationmanagersharp
+```
 ## UI Usage
 
 ### Managing Translations
