@@ -77,7 +77,19 @@ GET /api/translations/{key}/{culture}
 ```bash
 curl -X GET "https://yourapi.com/api/translations/welcome_message/en-US"
 ```
+## docker
 
+### Run using docker
+```bash
+docker run -d \
+  -p 8080:8080 \
+  -p 8081:8081 \
+  -e ASPNETCORE_ENVIRONMENT=Production \
+  -e ConnectionStrings__DefaultConnection="Host=postgres;Port=5432;Database=Translation;Username=postgres;Password=postgres" \
+  -e ConnectionStrings__Redis="redis:6379" \
+  --name translation-manager \
+  docker.io/realneovortex/traslationmanagersharp
+```
 ## UI Usage
 
 ### Managing Translations
