@@ -10,10 +10,14 @@ public class TranslationsApiController(ApplicationDbContext context, IDistribute
 {
 
     [HttpGet("{key}/{culture}")]
-    public async Task<IActionResult> GetTranslation(string key, string culture)
+    public async Task<IActionResult> GetTranslation(string key, string culture, [FromQuery] string parameters)
     {
-        var cacheKey = $"translation_{key}_{culture}";
-        
+        var parameterArray = string.IsNullOrEmpty(parameters)
+            ? []
+            : parameters.Split(',', StringSplitOptions.TrimEntries);
+
+        var cacheKey = $"translation_{key}_{culture}_{string.Join("_", parameterArray)}";
+
         var cachedValue = await cache.GetStringAsync(cacheKey);
         if (cachedValue != null)
         {
@@ -30,17 +34,30 @@ public class TranslationsApiController(ApplicationDbContext context, IDistribute
         }
 
         var value = translation.Values.FirstOrDefault(v => v.Culture == culture);
-        
         if (value == null)
         {
             return NotFound($"Translation for culture '{culture}' not found");
         }
 
-        await cache.SetStringAsync(cacheKey, value.Value, new DistributedCacheEntryOptions
+        string finalText;
+        try
+        {
+            finalText = parameterArray.Length > 0
+                ? string.Format(value.Value, parameterArray)
+                : value.Value;
+        }
+        catch (FormatException ex)
+        {
+            return BadRequest($"Error formatting translation: {ex.Message}");
+        }
+
+        await cache.SetStringAsync(cacheKey, finalText, new DistributedCacheEntryOptions
         {
             AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
         });
 
-        return Ok(value.Value);
+        return Ok(finalText);
     }
+
+
 }
