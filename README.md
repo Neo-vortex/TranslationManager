@@ -68,7 +68,7 @@ The Translation Manager provides a complete solution for managing application tr
 ### Get Translation Endpoint
 
 ```http
-GET /api/translations/{key}/{culture}
+GET /api/translations/{key}/{culture}?parameters=1,2
 ```
 
 | Parameter    | Type   | Description                                                                             |
